@@ -147,7 +147,10 @@ jobs:
       - name: "编译本次新增的 DYYY：Jailed Impactor arm64 dylib"
         run: |
           set -euo pipefail
-          rm -rf .theos-jailed packages/jailed
+          # Theos versions differ on whether they honor THEOS_BUILD_DIR. Clear
+          # both possible object roots so this binary cannot be copied from a
+          # preceding package build.
+          rm -rf .theos .theos-jailed packages/jailed
           make -f Makefile.jailed jailed-dylib -j$(sysctl -n hw.ncpu)
           test -f packages/jailed/DYYY.dylib
 

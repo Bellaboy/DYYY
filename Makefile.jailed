@@ -22,6 +22,7 @@ INSTALL_TARGET_PROCESSES = Aweme
 
 # Keep this build isolated from the three package builds in the main Makefile.
 THEOS_BUILD_DIR = $(THEOS_PROJECT_DIR)/.theos-jailed
+THEOS_OBJ_DIR = $(THEOS_BUILD_DIR)/obj
 
 include $(THEOS)/makefiles/common.mk
 
@@ -42,7 +43,7 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 .PHONY: jailed-dylib
 jailed-dylib: all
 	@set -e; \
-	dylib="$$(find "$(THEOS_BUILD_DIR)/obj" -type f -name 'DYYY.dylib' -print -quit)"; \
+	dylib="$$(find .theos-jailed .theos -type f -path '*/arm64/DYYY.dylib' -print -quit 2>/dev/null)"; \
 	if [ -z "$$dylib" ]; then \
 		echo 'Unable to locate the standalone Jailed DYYY.dylib' >&2; \
 		exit 1; \
