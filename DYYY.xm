@@ -17587,7 +17587,7 @@ static NSString *const kHideRecentUsersKey = @"DYYYHideSidebarRecentUsers";
     DYYYMigrateScaleAndSizeSettingsIfNeeded();
     DYYYMigrateScaleAndSizeSettingsV2IfNeeded();
 
-    // 仅在构造阶段准备 C Hook；UIKit 与宿主帧率对象延后至 App 激活后访问。
+    // 仅在构造阶段准备 loader-safe hooks；UIKit 与宿主帧率对象延后至 App 激活后访问。
     DYYYHookManagerStartLoaderSafePhase();
     DYYYStartHideFeedAnchorHookInstaller();
 

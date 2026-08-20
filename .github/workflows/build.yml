@@ -46,10 +46,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate release automation
+      - name: "验证原项目发布自动化：保持 release notes 合约不变"
         run: .github/scripts/test-release-notes.sh
 
-      - name: Detect build-relevant changes
+      - name: "检测本次源码/打包修改：决定是否重新构建"
         id: relevance
         env:
           PUSH_BEFORE: ${{ github.event.before }}
@@ -74,18 +74,30 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: Check cache
+      - name: "校验本次兼容性修复：禁止 CoreFoundation inline hook"
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_file="Sources/Features/DYYYHighFPSHooks.m"
+          if grep -En 'MSHookFunction|DYYYInstallCFBundleProMotionHookIfNeeded|DYYYCFBundleGetValueForInfoDictionaryKey' "$source_file"; then
+            echo "The CoreFoundation inline hook must remain disabled for the iOS 27 Impactor build." >&2
+            exit 1
+          fi
+          grep -Eq 'method_setImplementation' "$source_file"
+          test -f DYYYABTestHook.xm
+
+      - name: "检查原项目依赖缓存：解析 Theos 与 SDK 提交"
         run: |
           echo upstream_heads=`git ls-remote https://github.com/roothide/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1` >> $GITHUB_ENV
 
-      - name: Use cache
+      - name: "复用原项目 Theos 缓存：避免改变构建环境"
         id: cache
         uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/theos
           key: ${{ runner.os }}-${{ env.upstream_heads }}
 
-      - name: Remove unused Homebrew taps
+      - name: "清理无关 Homebrew taps：不修改 DYYY 源码"
         env:
           HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
           HOMEBREW_NO_AUTOREMOVE: "1"
@@ -99,38 +111,38 @@ jobs:
             fi
           done
 
-      - name: Prepare Theos
+      - name: "准备原项目 Theos：编译当前兼容性修复"
         uses: huami1314/theos-action@main
 
-      - name: Setup GNU Make
+      - name: "准备 GNU Make：保持原项目 Makefile 行为"
         run: |
           echo "$(brew --prefix)/opt/make/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: Clean packages dir
+      - name: "清理并重建 packages：保持原项目产物目录"
         run: rm -rf packages && mkdir -p packages
 
-      - name: Build Rootful
+      - name: "编译本次修改后的 DYYY：rootful .deb"
         run: |
           make package SCHEME=rootful FINALPACKAGE=1 -j$(sysctl -n hw.ncpu)
           for f in packages/*.deb; do
             [ -f "$f" ] && [[ "$f" != *"-root"*".deb" ]] && mv "$f" "${f%.deb}-rootful.deb"
           done
 
-      - name: Build Rootless
+      - name: "编译本次修改后的 DYYY：rootless .deb"
         run: |
           make package SCHEME=rootless FINALPACKAGE=1 -j$(sysctl -n hw.ncpu)
           for f in packages/*.deb; do
             [ -f "$f" ] && [[ "$f" != *"-root"*".deb" ]] && mv "$f" "${f%.deb}-rootless.deb"
           done
 
-      - name: Build Roothide
+      - name: "编译本次修改后的 DYYY：roothide .deb"
         run: |
           make package SCHEME=roothide FINALPACKAGE=1 -j$(sysctl -n hw.ncpu)
           for f in packages/*.deb; do
             [ -f "$f" ] && [[ "$f" != *"-root"*".deb" ]] && mv "$f" "${f%.deb}-roothide.deb"
           done
 
-      - name: Prepare package metadata
+      - name: "生成本次修改产物元数据：版本号与北京时间戳"
         id: package
         run: |
           timestamp=$(TZ=Asia/Shanghai date +%Y%m%d%H%M%S)
@@ -142,7 +154,7 @@ jobs:
           echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Deb packages
+      - name: "验证本次修改产物：3 个 scheme 专属 .deb"
         shell: bash
         run: |
           set -euo pipefail
@@ -165,12 +177,12 @@ jobs:
 
           printf 'Package artifact: %s\n' "${deb_files[@]}"
 
-      - name: Extract arm64 dylib
+      - name: "提取本次兼容性修复后的 arm64 dylib"
         env:
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: .github/scripts/extract-release-dylib.sh
 
-      - name: Upload package artifacts
+      - name: "上传原项目标准产物：3 个 .deb 与 1 个 .dylib"
         uses: actions/upload-artifact@v7
         with:
           name: DYYY-${{ steps.package.outputs.timestamp }}

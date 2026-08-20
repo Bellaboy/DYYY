@@ -8,7 +8,6 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <stdatomic.h>
-#import <substrate.h>
 
 /*
  * 基于对 Aweme 39.8 解包的静态证据（.ipa_extract_3980）：
@@ -22,7 +21,6 @@
 static NSString *const kDYYYCADisableMinimumFrameDurationOnPhoneKey = @"CADisableMinimumFrameDurationOnPhone";
 
 static atomic_bool gDYYYHighFPSStarted = false;
-static atomic_bool gDYYYCFBundleHookInstalled = false;
 static atomic_bool gDYYYDegradeHookInstalled = false;
 static atomic_bool gDYYYLoadObserversInstalled = false;
 
@@ -36,8 +34,6 @@ static id gDYYYPowerObserver = nil;
 static IMP gOrigSetDisableDegradeOperation = NULL;
 typedef void (*DYYYVoidBoolIMP)(id, SEL, BOOL);
 typedef id (*DYYYObjectGetterIMP)(id, SEL);
-
-static CFTypeRef (*gOrigCFBundleGetValueForInfoDictionaryKey)(CFBundleRef, CFStringRef) = NULL;
 
 static BOOL DYYYHighFPSEnabled(void) {
     return DYYYGetBoolCached(DYYY_ENABLE_HIGH_FPS_KEY);
@@ -176,28 +172,6 @@ static BOOL DYYYWriteMainBundleInfoPlistIfPossible(BOOL enabled) {
         return NO;
     }
     return [data writeToFile:path atomically:YES];
-}
-
-static CFTypeRef DYYYCFBundleGetValueForInfoDictionaryKey(CFBundleRef bundle, CFStringRef key) {
-    // 门闩保持解锁，便于负载恢复后快速回到高刷；降档走宿主 degrade，不反复改写 plist。
-    if (DYYYHighFPSEnabled() && key &&
-        CFStringCompare(key, CFSTR("CADisableMinimumFrameDurationOnPhone"), 0) == kCFCompareEqualTo) {
-        return kCFBooleanTrue;
-    }
-    if (gOrigCFBundleGetValueForInfoDictionaryKey) {
-        return gOrigCFBundleGetValueForInfoDictionaryKey(bundle, key);
-    }
-    return NULL;
-}
-
-static void DYYYInstallCFBundleProMotionHookIfNeeded(void) {
-    bool expected = false;
-    if (!atomic_compare_exchange_strong(&gDYYYCFBundleHookInstalled, &expected, true)) {
-        return;
-    }
-    MSHookFunction((void *)CFBundleGetValueForInfoDictionaryKey,
-                   (void *)DYYYCFBundleGetValueForInfoDictionaryKey,
-                   (void **)&gOrigCFBundleGetValueForInfoDictionaryKey);
 }
 
 #pragma mark - AWEDisplayLinkDegradeManager
@@ -388,7 +362,6 @@ static void DYYYInstallLoadObserversIfNeeded(void) {
 
 static void DYYYApplyProMotionUnlock(BOOL enabled) {
     DYYYCaptureDiskProMotionKeyIfNeeded();
-    DYYYInstallCFBundleProMotionHookIfNeeded();
     BOOL mutated = DYYYMutateMainBundleInfoDictionary(enabled);
     BOOL written = DYYYWriteMainBundleInfoPlistIfPossible(enabled);
     id runtimeValue = [[NSBundle mainBundle] objectForInfoDictionaryKey:kDYYYCADisableMinimumFrameDurationOnPhoneKey];
@@ -431,7 +404,6 @@ void DYYYStartHighFPSHooks(void) {
         return;
     }
 
-    DYYYInstallCFBundleProMotionHookIfNeeded();
     DYYYInstallLoadObserversIfNeeded();
 
     if (DYYYHighFPSEnabled()) {

@@ -44,7 +44,7 @@ jobs:
       artifact_name: ${{ steps.resolve.outputs.artifact_name }}
 
     steps:
-      - name: Resolve source run metadata
+      - name: "解析本次修改的 build.yml 运行信息：锁定成功构建产物"
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,18 +99,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - name: "检出本次兼容性修复源码：准备发布校验"
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Download release package artifacts
+      - name: "下载本次兼容性修复产物：沿用原项目 artifact"
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.source.outputs.artifact_name }}
           run-id: ${{ needs.source.outputs.run_id }}
           github-token: ${{ github.token }}
 
-      - name: Prepare packages directory
+      - name: "整理本次修改产物：恢复原项目 packages 目录"
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -132,7 +133,7 @@ jobs:
           printf 'Downloaded release assets:\n'
           printf '  %s\n' packages/*
 
-      - name: Prepare release metadata
+      - name: "生成本次修改 Release 元数据：版本号与目标提交"
         id: release
         env:
           BUILD_RUN_NUMBER: ${{ needs.source.outputs.run_number }}
@@ -152,7 +153,7 @@ jobs:
           echo "tag=$release_name" >> "$GITHUB_OUTPUT"
           echo "title=$release_name" >> "$GITHUB_OUTPUT"
 
-      - name: Verify release assets
+      - name: "验证本次修改 Release 产物：3 个 .deb 与 1 个 dylib"
         shell: bash
         run: |
           set -euo pipefail
@@ -181,7 +182,7 @@ jobs:
 
           printf 'Release asset: %s\n' "${deb_files[@]}" "${dylib_files[@]}"
 
-      - name: Coordinate Release publication
+      - name: "协调本次修改 Release 发布：执行原项目冷却规则"
         id: release_gate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -199,7 +200,7 @@ jobs:
           fi
           .github/scripts/release-coordinator.sh
 
-      - name: Resolve safe Release target
+      - name: "解析本次修改的安全 Release 目标：避免发布过期提交"
         id: release_target
         if: steps.release_gate.outputs.should_publish == 'true'
         env:
@@ -234,7 +235,7 @@ jobs:
           echo "should_publish=true" >> "$GITHUB_OUTPUT"
           echo "sha=${target_sha}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate release notes
+      - name: "生成本次修改 Release notes：基于修复后的源码"
         if: >-
           steps.release_gate.outputs.should_publish == 'true' &&
           steps.release_target.outputs.should_publish == 'true'
@@ -244,7 +245,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/generate-release-notes.sh
 
-      - name: Publish GitHub Release
+      - name: "发布本次兼容性修复 Release：上传原项目标准文件"
         if: >-
           steps.release_gate.outputs.should_publish == 'true' &&
           steps.release_target.outputs.should_publish == 'true'
