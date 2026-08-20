@@ -1,0 +1,52 @@
+# Standalone arm64 dylib for Impactor/IPA sideload injection.
+#
+# This file deliberately does not set SCHEME or THEOS_PACKAGE_SCHEME. It builds
+# the same DYYY implementation sources as the package targets, with
+# DYYY_JAILED enabled so jailbreak-only APIs and paths are excluded at compile
+# time. The output is a raw DYYY.dylib, not a Debian package.
+
+TARGET = iphone:clang:latest:14.0
+ARCHS = arm64
+
+# Remove any inherited scheme as well as preventing it from reaching Theos.
+undefine THEOS_PACKAGE_SCHEME
+unexport THEOS_PACKAGE_SCHEME
+export DEBUG = 0
+export FINALPACKAGE = 1
+export INSTALL = 0
+export THEOS_STRICT_LOGOS = 0
+export ERROR_ON_WARNINGS = 0
+export LOGOS_DEFAULT_GENERATOR = internal
+
+INSTALL_TARGET_PROCESSES = Aweme
+
+# Keep this build isolated from the three package builds in the main Makefile.
+THEOS_BUILD_DIR = $(THEOS_PROJECT_DIR)/.theos-jailed
+
+include $(THEOS)/makefiles/common.mk
+
+TWEAK_NAME = DYYY
+include Makefile.sources
+
+DYYY_FILES = $(DYYY_SOURCE_FILES)
+DYYY_CFLAGS = $(DYYY_COMMON_CFLAGS) -DDYYY_JAILED=1
+DYYY_LDFLAGS = $(DYYY_COMMON_LDFLAGS)
+DYYY_FRAMEWORKS = $(DYYY_COMMON_FRAMEWORKS)
+DYYY_LOGOS_DEFAULT_GENERATOR = internal
+
+CXXFLAGS += -std=c++11
+CCFLAGS += -std=c++11
+
+include $(THEOS_MAKE_PATH)/tweak.mk
+
+.PHONY: jailed-dylib
+jailed-dylib: all
+	@set -e; \
+	dylib="$$(find "$(THEOS_BUILD_DIR)/obj" -type f -name 'DYYY.dylib' -print -quit)"; \
+	if [ -z "$$dylib" ]; then \
+		echo 'Unable to locate the standalone Jailed DYYY.dylib' >&2; \
+		exit 1; \
+	fi; \
+	mkdir -p "$(THEOS_PROJECT_DIR)/packages/jailed"; \
+	cp "$$dylib" "$(THEOS_PROJECT_DIR)/packages/jailed/DYYY.dylib"; \
+	echo "Jailed dylib: $(THEOS_PROJECT_DIR)/packages/jailed/DYYY.dylib"

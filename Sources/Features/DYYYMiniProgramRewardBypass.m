@@ -6,7 +6,9 @@
 #import <objc/runtime.h>
 #import <stdatomic.h>
 #import <string.h>
+#ifndef DYYY_JAILED
 #import <substrate.h>
+#endif
 
 static NSString *const kDYYYMiniProgramRewardEnabledKey = @"DYYYEnableMiniProgramJumpingAds";
 static NSString *const kDYYYMiniProgramRewardControllerClassName = @"BDARewardedVideoAdBaseController";
@@ -426,7 +428,25 @@ static BOOL DYYYMiniProgramInstallHook(Class cls,
     }
 
     IMP previousImplementation = NULL;
+#ifdef DYYY_JAILED
+    // Jailed injection has no Substrate/ElleKit runtime. Install a class-local
+    // Objective-C runtime override and retain the implementation being replaced.
+    // Adding an override first keeps an inherited method from being changed on
+    // its superclass, which limits the hook to the target controller class.
+    if (class_addMethod(cls,
+                        selector,
+                        replacement,
+                        method_getTypeEncoding(method))) {
+        previousImplementation = currentImplementation;
+    } else {
+        Method classMethod = class_getInstanceMethod(cls, selector);
+        previousImplementation = classMethod
+                                     ? method_setImplementation(classMethod, replacement)
+                                     : NULL;
+    }
+#else
     MSHookMessageEx(cls, selector, replacement, &previousImplementation);
+#endif
     if (!previousImplementation || previousImplementation == replacement) {
         NSLog(@"[DYYY][小程序跳广告] 无法保存原 IMP，停止使用：%@ %@",
               NSStringFromClass(cls),

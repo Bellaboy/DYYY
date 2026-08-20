@@ -28,6 +28,8 @@ on:
       - 'DYYY.plist'
       - 'control'
       - 'Makefile'
+      - 'Makefile.sources'
+      - 'Makefile.jailed'
       - 'layout/**'
   workflow_dispatch:
 
@@ -142,6 +144,61 @@ jobs:
             [ -f "$f" ] && [[ "$f" != *"-root"*".deb" ]] && mv "$f" "${f%.deb}-roothide.deb"
           done
 
+      - name: "编译本次新增的 DYYY：Jailed Impactor arm64 dylib"
+        run: |
+          set -euo pipefail
+          rm -rf .theos-jailed packages/jailed
+          make -f Makefile.jailed jailed-dylib -j$(sysctl -n hw.ncpu)
+          test -f packages/jailed/DYYY.dylib
+
+      - name: "检查本次新增 Jailed dylib：file 与 arm64 架构"
+        shell: bash
+        run: |
+          set -euo pipefail
+          jailed="packages/jailed/DYYY.dylib"
+          file "$jailed"
+          lipo -info "$jailed"
+          file "$jailed" | grep -Eq 'arm64'
+          lipo -info "$jailed" | grep -Eq 'arm64'
+
+      - name: "检查本次新增 Jailed dylib：otool 动态依赖与 Mach-O Load Commands"
+        shell: bash
+        run: |
+          set -euo pipefail
+          jailed="packages/jailed/DYYY.dylib"
+          echo "===== otool -L $jailed ====="
+          otool -L "$jailed"
+          echo "===== otool -l $jailed ====="
+          otool -l "$jailed"
+
+          if otool -L "$jailed" | grep -Eiq '/var/jb|/Library/|\.jbroot|mobilesubstrate|substitute|ellekit|cephei'; then
+            echo 'Jailed dylib contains a forbidden jailbreak-only dynamic dependency.' >&2
+            exit 1
+          fi
+          if otool -l "$jailed" | grep -Eiq '/var/jb|/Library/|\.jbroot'; then
+            echo 'Jailed dylib contains a forbidden jailbreak-only Mach-O path.' >&2
+            exit 1
+          fi
+
+      - name: "验证本次新增 Jailed 产物：独立 dylib 不混入 Debian 包"
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find packages/jailed -maxdepth 1 -type f -name 'DYYY.dylib' | wc -l | tr -d ' ')" = 1
+          if find packages/jailed -maxdepth 1 -type f ! -name 'DYYY.dylib' | grep -q .; then
+            echo 'The Jailed artifact directory contains an unexpected dependency or package.' >&2
+            exit 1
+          fi
+
+      - name: "整理本次四类独立 Artifact：固定上传文件名"
+        run: |
+          set -euo pipefail
+          rm -rf packages/artifacts
+          mkdir -p packages/artifacts/rootful packages/artifacts/rootless packages/artifacts/roothide
+          cp packages/*-rootful.deb packages/artifacts/rootful/DYYY-rootful.deb
+          cp packages/*-rootless.deb packages/artifacts/rootless/DYYY-rootless.deb
+          cp packages/*-roothide.deb packages/artifacts/roothide/DYYY-roothide.deb
+
       - name: "生成本次修改产物元数据：版本号与北京时间戳"
         id: package
         run: |
@@ -189,3 +246,31 @@ jobs:
           path: |
             ${{ github.workspace }}/packages/*.deb
             ${{ github.workspace }}/packages/*.dylib
+
+      - name: "上传本次新增 Artifact：DYYY-rootful"
+        uses: actions/upload-artifact@v7
+        with:
+          name: DYYY-rootful
+          if-no-files-found: error
+          path: ${{ github.workspace }}/packages/artifacts/rootful/DYYY-rootful.deb
+
+      - name: "上传本次新增 Artifact：DYYY-rootless"
+        uses: actions/upload-artifact@v7
+        with:
+          name: DYYY-rootless
+          if-no-files-found: error
+          path: ${{ github.workspace }}/packages/artifacts/rootless/DYYY-rootless.deb
+
+      - name: "上传本次新增 Artifact：DYYY-roothide"
+        uses: actions/upload-artifact@v7
+        with:
+          name: DYYY-roothide
+          if-no-files-found: error
+          path: ${{ github.workspace }}/packages/artifacts/roothide/DYYY-roothide.deb
+
+      - name: "上传本次新增 Artifact：DYYY-Jailed Impactor arm64"
+        uses: actions/upload-artifact@v7
+        with:
+          name: DYYY-Jailed
+          if-no-files-found: error
+          path: ${{ github.workspace }}/packages/jailed/DYYY.dylib

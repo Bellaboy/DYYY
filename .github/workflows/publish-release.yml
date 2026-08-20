@@ -42,6 +42,8 @@ jobs:
       head_branch: ${{ steps.resolve.outputs.head_branch }}
       run_number: ${{ steps.resolve.outputs.run_number }}
       artifact_name: ${{ steps.resolve.outputs.artifact_name }}
+      has_jailed_artifact: ${{ steps.resolve.outputs.has_jailed_artifact }}
+      jailed_artifact_name: ${{ steps.resolve.outputs.jailed_artifact_name }}
 
     steps:
       - name: "解析本次修改的 build.yml 运行信息：锁定成功构建产物"
@@ -52,6 +54,7 @@ jobs:
           ARTIFACT_NAME_INPUT: ${{ inputs.artifact_name }}
         run: |
           set -euo pipefail
+          echo "has_jailed_artifact=false" >> "$GITHUB_OUTPUT"
 
           run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")
           workflow_path=$(jq -r '.path' <<< "$run_json")
@@ -93,6 +96,16 @@ jobs:
           echo "artifact_name=${artifact_name}" >> "$GITHUB_OUTPUT"
           echo "Using artifact: ${artifact_name}"
 
+          jailed_artifact_name=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.expired == false and .name == "DYYY-Jailed")][0].name // empty')
+          if [[ -n "$jailed_artifact_name" ]]; then
+            echo "has_jailed_artifact=true" >> "$GITHUB_OUTPUT"
+            echo "jailed_artifact_name=${jailed_artifact_name}" >> "$GITHUB_OUTPUT"
+            echo "Using optional Jailed artifact: ${jailed_artifact_name}"
+          else
+            echo "No Jailed artifact found; publishing the legacy release asset set."
+          fi
+
   publish:
     needs: source
     if: needs.source.outputs.has_artifact == 'true'
@@ -111,7 +124,18 @@ jobs:
           run-id: ${{ needs.source.outputs.run_id }}
           github-token: ${{ github.token }}
 
+      - name: "下载本次新增 Jailed Release 资产：DYYY-Jailed"
+        if: needs.source.outputs.has_jailed_artifact == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.source.outputs.jailed_artifact_name }}
+          path: jailed-artifact
+          run-id: ${{ needs.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+
       - name: "整理本次修改产物：恢复原项目 packages 目录"
+        env:
+          HAS_JAILED_ARTIFACT: ${{ needs.source.outputs.has_jailed_artifact }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -122,6 +146,16 @@ jobs:
           for file in packages/*/*.deb packages/*/*.dylib; do
             [ -f "$file" ] && mv "$file" packages/
           done
+
+          jailed_files=(jailed-artifact/DYYY.dylib jailed-artifact/*/DYYY.dylib)
+          if [[ "${HAS_JAILED_ARTIFACT:-false}" == "true" ]]; then
+            if [ "${#jailed_files[@]}" -ne 1 ]; then
+              echo "Expected one DYYY.dylib in the Jailed artifact, found ${#jailed_files[@]}" >&2
+              printf '  %s\n' "${jailed_files[@]}" >&2
+              exit 1
+            fi
+            mv "${jailed_files[0]}" packages/DYYY-Jailed-Impactor-arm64.dylib
+          fi
 
           deb_files=(packages/*.deb)
           if [ "${#deb_files[@]}" -eq 0 ]; then
@@ -153,8 +187,10 @@ jobs:
           echo "tag=$release_name" >> "$GITHUB_OUTPUT"
           echo "title=$release_name" >> "$GITHUB_OUTPUT"
 
-      - name: "验证本次修改 Release 产物：3 个 .deb 与 1 个 dylib"
+      - name: "验证本次修改 Release 产物：3 个 .deb 与 Jailed dylib"
         shell: bash
+        env:
+          HAS_JAILED_ARTIFACT: ${{ needs.source.outputs.has_jailed_artifact }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -166,8 +202,17 @@ jobs:
             printf '  %s\n' "${deb_files[@]}" >&2
             exit 1
           fi
-          if [ "${#dylib_files[@]}" -ne 1 ]; then
-            echo "Expected 1 dylib, found ${#dylib_files[@]}:" >&2
+          expected_dylib_count=1
+          if [[ "$HAS_JAILED_ARTIFACT" == "true" ]]; then
+            expected_dylib_count=2
+            jailed_asset_files=(packages/DYYY-Jailed-Impactor-arm64.dylib)
+            if [ "${#jailed_asset_files[@]}" -ne 1 ]; then
+              echo 'The Jailed Release asset is missing.' >&2
+              exit 1
+            fi
+          fi
+          if [ "${#dylib_files[@]}" -ne "$expected_dylib_count" ]; then
+            echo "Expected ${expected_dylib_count} dylib(s), found ${#dylib_files[@]}:" >&2
             printf '  %s\n' "${dylib_files[@]}" >&2
             exit 1
           fi

@@ -8,7 +8,7 @@ is_direct_build_path() {
     local path=$1
 
     case "$path" in
-        DYYY.plist|control|layout/*)
+        DYYY.plist|control|Makefile.jailed|Makefile.sources|layout/*)
             return 0
             ;;
         Sources/*.h|Sources/*.m|Sources/*.mm|Sources/*.x|Sources/*.xm|Sources/*.c|Sources/*.cc|Sources/*.cpp|Sources/*.s|Sources/*.S)

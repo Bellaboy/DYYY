@@ -1239,10 +1239,17 @@ static BOOL DYYYSpawnApplicationRelaunchTaskAfterDelay(NSTimeInterval delay) {
         [quotedTargets addObject:DYYYShellQuotedString(target)];
     }
     NSString *targetList = [quotedTargets componentsJoinedByString:@" "];
+#ifdef DYYY_JAILED
+    NSString *logPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"dyyy-relaunch.log"];
+    NSString *quotedLogPath = DYYYShellQuotedString(logPath);
+    NSString *command = [NSString stringWithFormat:@"log=%@; : > \"$log\"; export PATH=/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}; uid=%u; echo \"start $(date)\" >> \"$log\"; sleep %.2f; open_target() { target=\"$1\"; echo \"open $target\" >> \"$log\"; for tool in /usr/bin/uiopen; do if [ -x \"$tool\" ]; then \"$tool\" \"$target\" >> \"$log\" 2>&1 && exit 0; fi; done; if command -v uiopen >/dev/null 2>&1; then uiopen \"$target\" >> \"$log\" 2>&1 && exit 0; fi; }; for target in %@; do open_target \"$target\"; done; echo 'failed' >> \"$log\"; exit 1",
+                         quotedLogPath, (unsigned)getuid(), MAX(delay, 0.0), targetList];
+    NSArray<NSString *> *shellCandidates = @[ @"/bin/sh", @"/usr/bin/sh" ];
+#else
     NSString *command = [NSString stringWithFormat:@"log='/tmp/dyyy-relaunch.log'; : > \"$log\"; export PATH=/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}; uid=%u; echo \"start $(date)\" >> \"$log\"; sleep %.2f; open_target() { target=\"$1\"; echo \"open $target\" >> \"$log\"; for tool in /var/jb/usr/bin/uiopen /usr/bin/uiopen; do if [ -x \"$tool\" ]; then /bin/launchctl asuser \"$uid\" \"$tool\" \"$target\" >> \"$log\" 2>&1 && exit 0; \"$tool\" \"$target\" >> \"$log\" 2>&1 && exit 0; fi; done; if command -v uiopen >/dev/null 2>&1; then uiopen \"$target\" >> \"$log\" 2>&1 && exit 0; fi; }; for target in %@; do open_target \"$target\"; done; echo 'failed' >> \"$log\"; exit 1",
                          (unsigned)getuid(), MAX(delay, 0.0), targetList];
-
     NSArray<NSString *> *shellCandidates = @[ @"/var/jb/bin/sh", @"/var/jb/usr/bin/sh", @"/bin/sh", @"/usr/bin/sh" ];
+#endif
     for (NSString *shellPath in shellCandidates) {
         pid_t pid = 0;
         posix_spawnattr_t attributes;

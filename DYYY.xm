@@ -14,7 +14,9 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <os/lock.h>
+#ifndef DYYY_JAILED
 #import <substrate.h>
+#endif
 #import <stdlib.h>
 #import <string.h>
 #import <syslog.h>
