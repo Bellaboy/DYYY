@@ -31,7 +31,9 @@ include Makefile.sources
 
 DYYY_FILES = $(DYYY_SOURCE_FILES)
 DYYY_CFLAGS = $(DYYY_COMMON_CFLAGS) -DDYYY_JAILED=1
-DYYY_LDFLAGS = $(DYYY_COMMON_LDFLAGS)
+# Theos' tweak default points at /Library/MobileSubstrate. A sideloaded dylib
+# must identify itself relative to the containing IPA bundle instead.
+DYYY_LDFLAGS = $(DYYY_COMMON_LDFLAGS) -Wl,-install_name,@loader_path/DYYY.dylib
 DYYY_FRAMEWORKS = $(DYYY_COMMON_FRAMEWORKS)
 DYYY_LOGOS_DEFAULT_GENERATOR = internal
 

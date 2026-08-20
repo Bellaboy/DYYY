@@ -242,6 +242,16 @@ jobs:
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: .github/scripts/extract-release-dylib.sh
 
+      - name: "整理原项目 arm64 dylib：与新增 Jailed 版本并存"
+        env:
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          set -euo pipefail
+          rm -rf packages/artifacts/original-dylib
+          mkdir -p packages/artifacts/original-dylib
+          cp "packages/DYYY_${PACKAGE_VERSION}.dylib" \
+             "packages/artifacts/original-dylib/DYYY_${PACKAGE_VERSION}.dylib"
+
       - name: "上传原项目标准产物：3 个 .deb 与 1 个 .dylib"
         uses: actions/upload-artifact@v7
         with:
@@ -249,6 +259,13 @@ jobs:
           path: |
             ${{ github.workspace }}/packages/*.deb
             ${{ github.workspace }}/packages/*.dylib
+
+      - name: "上传原项目兼容性 Artifact：DYYY-original-dylib"
+        uses: actions/upload-artifact@v7
+        with:
+          name: DYYY-original-dylib
+          if-no-files-found: error
+          path: ${{ github.workspace }}/packages/artifacts/original-dylib/*.dylib
 
       - name: "上传本次新增 Artifact：DYYY-rootful"
         uses: actions/upload-artifact@v7
