@@ -174,11 +174,12 @@ jobs:
           echo "===== otool -l $jailed ====="
           otool -l "$jailed"
 
-          if otool -L "$jailed" | grep -Eiq '/var/jb|/Library/|\.jbroot|mobilesubstrate|substitute|ellekit|cephei'; then
+          forbidden_jail_path='(^|[[:space:]])/var/jb|(^|[[:space:]])/Library/|\.jbroot'
+          if otool -L "$jailed" | grep -Eiq "$forbidden_jail_path|mobilesubstrate|substitute|ellekit|cephei"; then
             echo 'Jailed dylib contains a forbidden jailbreak-only dynamic dependency.' >&2
             exit 1
           fi
-          if otool -l "$jailed" | grep -Eiq '/var/jb|/Library/|\.jbroot'; then
+          if otool -l "$jailed" | grep -Eiq "$forbidden_jail_path"; then
             echo 'Jailed dylib contains a forbidden jailbreak-only Mach-O path.' >&2
             exit 1
           fi
