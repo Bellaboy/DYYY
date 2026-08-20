@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       artifact_name:
-        description: 'Artifact 名称（留空则自动取该 run 的第一个 artifact）'
+        description: 'Artifact 名称（留空则自动取该 run 的标准 DYYY-时间戳 artifact）'
         required: false
         type: string
         default: ''
@@ -79,7 +79,11 @@ jobs:
             artifact_name="$ARTIFACT_NAME_INPUT"
           else
             artifact_name=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
-              --jq '[.artifacts[] | select(.expired == false)][0].name')
+              --jq '[.artifacts[] | select(.expired == false and (.name | test("^DYYY-[0-9]{14}$")))][0].name // empty')
+            if [[ -z "$artifact_name" ]]; then
+              artifact_name=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+                --jq '[.artifacts[] | select(.expired == false)][0].name // empty')
+            fi
           fi
 
           if [[ -z "$artifact_name" || "$artifact_name" == "null" ]]; then
